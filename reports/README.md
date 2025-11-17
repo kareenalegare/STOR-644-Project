@@ -1,12 +1,23 @@
 # Report Folder
 
-This folder contains all written components of the project.  These can be PDFs of the two parts of your report. If you wish, you can also include the source files used to generate the reports, but this is optional.
+This folder contains written reports for the STOR 664 group project. Part 1 report for the course project.
+
+Includes:
+
+Introduction and motivation
+
+Description of the Pokémon dataset
+
+Exploratory data analysis (EDA)
+
+Discussion of data limitations
+
+Proposed analysis plan and null hypotheses for Part 2
 
 ## Structure
 ```text
 report/
-├── 01_introduction_and_exploration.pdf # Question of interest, background, motivation, data sources, initial exploration
-├── 02_analysis_results_discussion.pdf  # Analysis plan, findings and figures, interpetation, limitations, conclusions
+├── 01_introduction_and_EDA.pdf
 ```
 
 ## Expectations
