@@ -461,8 +461,7 @@ same_panel
 This dataset doesn't include some characteristics of Pokemon that may or may not be helpful in answering our questions. For example, it doesn't include the catch rate of Pokemon or if the Pokemon is legendary/mythical or not. 
 
 ## Proposed analysis plan
-For our next steps, we plan on doing some variable and model selection to identify which predictors should be included in our linear model. Then we will fit a linear model and do some hypothesis tests (T-tests and F-tests) to draw a conclusion on our null hypotheses. 
-
+The team will carry out an iterative, back-and-forth model-building process within the linear regression framework for predicting HP, trying different combinations of predictors and interactions. At each stage, we will use methods discussed in class—primarily *t-tests* for individual coefficients and *F-tests* for groups of terms—to assess which variables and interactions meaningfully contribute to the model. Once we arrive at a well-supported specification, we will use the fitted model to test the three hypotheses outlined earlier, reject or fail to reject them based on the results, and summarize our conclusions in the final project write-up.
 
 ## Acknowledgements 
 ChatGPT was used to help with coding. Yin and Kareena did the EDA and made the figures. Irene did the written portion of the report. Sam made the presentation.
