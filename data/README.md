@@ -1,25 +1,31 @@
 # Data Folder
 
-This folder contains **all datasets used in your project**.  
-It should include both raw data (as downloaded) and any processed or cleaned versions used for analysis.
-If you are not downloading a raw dataset but instead loading it dynamically (e.g. through TidyTuesday), you should still have at least one processed dataset that can be used for your analysis. 
+This folder contains the raw Pokémon data used in our STOR 664 project and a processed version prepared for analysis. The dimension of the dataset is 949 rows × 22 columns. Each row corresponds to a Pokémon species or form. Columns include: - Basic identifiers: pokemon, id, species_id
+
+-   Basic statistics: height, weight, base_experience
+
+-   Base stats: hp, attack, defense, special_attack, special_defense, speed
+
+-   Typing: type_1 (primary type), type_2 (secondary type, often NA for single-type Pokémon)
+
+-   Visual/metadata: color_1, color_2, color_f
+
+-   Breeding: egg_group_1, egg_group_2
+
+-   Design era: generation_id
+
+-   Image/icon URLs: url_icon, url_image
+
+Source: TidyTuesday, 2025-04-01 Pokémon dataset (loaded via `tidytuesdayR::tt_load(2025, week = 13)`).
+
+The processed dataset removed the following columns: `id`, `species_id`, `color_1`, `color_2`, `color_f`, `url_icon`, `url_image`.
 
 ## Structure
 
-```text
-data/
-├── raw/       # Unmodified source data
-├── processed/ # Cleaned, merged, or filtered data ready for modeling
+``` text
+dataset/
+├── raw/
+│   └── pokemon_raw.csv
+└── processed/
+    └── pokemon_processed.csv
 ```
-
-## Expectations
-- **`/raw`**  
-  - Store all original datasets exactly as obtained (CSV, JSON, etc.).  
-  - Do not manually edit these files.  
-  - Include a short description or link to the data source in this README or as a separate `data_dictionary.md` in this folder.
- 
-- **`/processed`**  
-  - Contains data files created by your scripts (e.g., cleaned datasets, merged tables).  
-  - Files in this folder should be reproducible by running scripts from `/src`.  
-
-If your data files are large (>100 MB) then include a small sample dataset here for reproducibility. 

@@ -1,0 +1,467 @@
+---
+title: "STOR 664 — Part 1 Combined EDA (Pokémon)"
+author: "Team: Yinyu Yao, Kareena Legare, Samuel Moore, Irene Zhang"
+date: "2025-11-15"
+output:
+  pdf_document: default
+  html_document:
+    toc: true
+    toc_float: true
+urlcolor: blue
+---
+## Introduction
+We used the Pokemon dataset from TidyTuesday. [Dataset Link](https://github.com/rfordatascience/tidytuesday/blob/main/data/2025/2025-04-01/readme.md) 
+
+Pokemon is a Japanese video game where you catch Pokemon in the wild and use them to fight your battles. Pokemon are wild monsters and each one has a type, like fire, water, grass, etc. They also have basic stats like HP, attack, defense etc. The dataset we chose 949 rows and 22 columns with information about the Pokemon's name, height weight, stats, type etc. 
+
+The question we want to answer is: What characteristics of Pokemon best predict their HP stat? Is there a relationship between HP and the Pokemon's other characteristics? 
+
+There are many existing projects that explore a Pokemon dataset. These can be found on Kaggle and Medium. Many of them do data visualization or EDA. In particular, this [Project](https://medium.com/@hanahshih46/pokemon-data-visualization-and-analysis-with-r-60970c8e37f4) attempts to answer a similar question as ours and performed a simple linear regression with HP as their Y-variable. 
+
+## EDA
+We first did extensive EDA on our dataset. 
+
+```{r setup, include=FALSE}
+# Load Packages and Data
+
+library(tidytuesdayR)
+library(tidyverse)
+library(janitor)
+library(forcats)
+library(broom)
+library(readr)
+library(patchwork)
+library(corrplot)
+
+# Keep dirs 
+dir.create("data/processed", recursive = TRUE, showWarnings = FALSE)
+dir.create("tables",         recursive = TRUE, showWarnings = FALSE)
+dir.create("figures",        recursive = TRUE, showWarnings = FALSE)
+
+tues <- tidytuesdayR::tt_load(2025, week = 13)
+pokemon <- tues$pokemon_df |>
+
+select(-id, -species_id, -color_1, -color_2, -color_f, -url_icon, -url_image) |>
+clean_names() |>
+mutate(
+dual_type       = !is.na(type_2),
+log_weight      = if_else(weight > 0, log(weight), NA_real_),
+log_height      = if_else(height > 0, log(height), NA_real_),
+base_stat_total = hp + attack + defense + special_attack + special_defense + speed
+)
+
+write_csv(pokemon, "data/processed/pokemon_processed.csv")
+
+
+```
+
+```{r}
+# 1)  Dataset Summary and Statistics
+
+# NA counts across ALL columns (1-row audit table)
+na_counts <- pokemon |>
+  summarise(across(everything(), ~sum(is.na(.)))) |>
+  tidyr::pivot_longer(
+    everything(),
+    names_to  = "variable",
+    values_to = "na_count"
+  ) |>
+  dplyr::filter(na_count > 0) |>
+  arrange(desc(na_count))
+knitr::kable(na_counts, digits = 0,
+             caption = "Columns with at least one missing value.")
+ 
+# Type1 / Generation counts
+gen_tab  <- as.data.frame(table(pokemon$generation_id, useNA = "ifany"))
+names(gen_tab) <- c("generation_id","count")
+type_tab <- as.data.frame(table(pokemon$type_1,       useNA = "ifany"))
+names(type_tab) <- c("type_1","count")
+
+knitr::kable(gen_tab,  caption = "Counts of Pokémon by generation_id")
+knitr::kable(type_tab, caption = "Counts of Pokémon by type_1")
+
+# egg_group_1 counts
+egg1_counts <- pokemon |> count(egg_group_1) |> arrange(desc(n))
+knitr::kable(egg1_counts, caption = "Counts of egg_group_1")
+
+```
+
+```{r}
+# 2) Conditional distribution P(type_2 | type_1) + X² ----
+
+pokemon_types <- pokemon |> filter(!is.na(type_2))
+
+type_pair_counts <- pokemon_types |>
+count(type_1, type_2, name = "n") |>
+group_by(type_1) |>
+mutate(row_total = sum(n), prop = n / row_total) |>
+arrange(type_1, desc(prop)) |>
+ungroup()
+
+knitr::kable(head(type_pair_counts, 15), digits = 3,
+caption = "P(type_2 | type_1): top 15 rows.")
+
+type2_pref <- type_pair_counts |>
+group_by(type_1) |>
+slice_max(prop, n = 1, with_ties = TRUE) |>
+arrange(type_1, desc(prop)) |>
+ungroup()
+
+knitr::kable(type2_pref, digits = 3,
+caption = "Most frequent secondary type(s) for each primary type.")
+
+tab_t1_t2 <- table(type_1 = pokemon_types$type_1, type_2 = pokemon_types$type_2)
+chi_res <- chisq.test(tab_t1_t2)  # prints Pearson X²
+chi_tbl <- tibble(statistic = as.numeric(chi_res$statistic),
+df        = as.integer(chi_res$parameter),
+p_value   = as.numeric(chi_res$p.value))
+knitr::kable(chi_tbl, caption = "Chi-squared test of independence between type_1 and type_2.")
+chi_res
+
+```
+
+```{r}
+# 3) By generation_id: distribution tables and boxplots
+
+pokemon <- pokemon |>
+mutate(generation_id_f = forcats::fct_na_value_to_level(as.factor(generation_id), level = "Unknown"))
+stat_vars <- c("hp","attack","defense","special_attack","special_defense","speed")
+
+gen_stats_all <- pokemon |>
+  group_by(generation_id_f) |>
+  summarise(
+    n = n(),
+    across(all_of(stat_vars),
+           list(mean = ~mean(.x, na.rm = TRUE),
+                sd   = ~sd(.x,   na.rm = TRUE)),
+           .names = "{.col}_{.fn}")
+  )
+
+gen_stats_long <- gen_stats_all |>
+  tidyr::pivot_longer(
+    cols = -c(generation_id_f, n),
+    names_to = c("stat", "metric"),
+    names_sep = "_(?=[^_]+$)"
+  ) |>
+  tidyr::pivot_wider(
+    names_from  = metric,
+    values_from = value
+  ) |>
+  # ensure stat is ordered like stat_vars: hp, attack, defense, ...
+  mutate(stat = factor(stat, levels = stat_vars)) |>
+  arrange(stat, generation_id_f)
+
+knitr::kable(
+  gen_stats_long,
+  digits = 1,
+  caption = "Means and SDs of stats by generation (including Unknown)."
+)
+
+gen_plots <- lapply(stat_vars, function(s) {
+  ggplot(pokemon, aes(x = generation_id_f, y = .data[[s]])) +
+    geom_boxplot(outlier.alpha = 0.4) +
+    labs(
+      title = paste("Dist. of", s, "by generation"),
+      x = "Generation",
+      y = s
+    ) +
+    theme_bw()
+})
+names(gen_plots) <- stat_vars
+
+gen_panel_1 <- gen_plots[["hp"]]             + gen_plots[["attack"]]
+gen_panel_2 <- gen_plots[["defense"]]        + gen_plots[["special_attack"]]
+gen_panel_3 <- gen_plots[["special_defense"]] + gen_plots[["speed"]]
+
+gen_panel_1
+gen_panel_2
+gen_panel_3
+
+```
+
+
+```{r}
+# 4) By type1: distribution tables and boxplots
+
+pokemon <- pokemon |>
+  mutate(type_1_f = forcats::fct_infreq(as.factor(type_1)))
+
+type1_stats <- pokemon |>
+  group_by(type_1_f) |>
+  summarise(
+    n = n(),
+    across(all_of(stat_vars),
+           list(mean = ~mean(.x, na.rm = TRUE),
+                sd   = ~sd(.x,   na.rm = TRUE)),
+           .names = "{.col}_{.fn}")
+  )
+
+# Table 1: HP and Speed
+type1_hp_speed <- type1_stats |>
+  select(type_1_f, n, hp_mean, hp_sd, speed_mean, speed_sd)
+
+knitr::kable(
+  type1_hp_speed,
+  digits = 1,
+  caption = "Means and SDs of HP and Speed by primary type (type_1)."
+)
+
+# Table 2: Attack and Special Attack
+type1_atk_spa <- type1_stats |>
+  select(type_1_f, n,
+         attack_mean, attack_sd,
+         special_attack_mean, special_attack_sd)
+
+knitr::kable(
+  type1_atk_spa,
+  digits = 1,
+  caption = "Means and SDs of Attack and Special Attack by primary type (type_1)."
+)
+
+# Table 3: Defense and Special Defense
+type1_def_spdef <- type1_stats |>
+  select(type_1_f, n,
+         defense_mean, defense_sd,
+         special_defense_mean, special_defense_sd)
+
+knitr::kable(
+  type1_def_spdef,
+  digits = 1,
+  caption = "Means and SDs of Defense and Special Defense by primary type (type_1)."
+)
+
+
+type_plots <- lapply(stat_vars, function(s) {
+  ggplot(pokemon, aes(x = type_1_f, y = .data[[s]])) +
+    geom_boxplot(outlier.alpha = 0.4) +
+    coord_flip() +
+    labs(
+      title = paste("Dist. of", s, "by type_1"),
+      x = "Primary type (type_1)",
+      y = s
+    ) +
+    theme_bw()
+})
+names(type_plots) <- stat_vars
+
+type_panel_1 <- type_plots[["hp"]]             + type_plots[["attack"]]
+type_panel_2 <- type_plots[["defense"]]        + type_plots[["special_attack"]]
+type_panel_3 <- type_plots[["special_defense"]] + type_plots[["speed"]]
+
+type_panel_1
+type_panel_2
+type_panel_3
+
+```
+
+
+```{r}
+# 5) Size → HP (raw vs log)
+
+p_hp_h  <- ggplot(pokemon, aes(height, hp))      + geom_point() + theme_bw() + labs(title="HP vs height")
+p_hp_lh <- ggplot(pokemon, aes(log(height), hp)) + geom_point() + theme_bw() + labs(title="HP vs log(height)")
+p_hp_w  <- ggplot(pokemon, aes(weight, hp))      + geom_point() + theme_bw() + labs(title="HP vs weight")
+p_hp_lw <- ggplot(pokemon, aes(log(weight), hp)) + geom_point() + theme_bw() + labs(title="HP vs log(weight)")
+
+hp_panel <- (p_hp_h + p_hp_lh) /
+            (p_hp_w + p_hp_lw)
+hp_panel
+
+```
+
+```{r}
+# 6) Variable Relations
+
+p_atk_spa <- ggplot(pokemon, aes(attack, special_attack))  + geom_point() + theme_bw() + labs(title="Special Attack vs Attack")
+p_def_spd <- ggplot(pokemon, aes(defense, special_defense)) + geom_point() + theme_bw() + labs(title="Special Defense vs Defense")
+atk_def_panel <- p_atk_spa + p_def_spd
+atk_def_panel
+
+eq_counts <- tibble(
+attack_eq_spatk  = sum(pokemon$attack  == pokemon$special_attack,  na.rm = TRUE),
+defense_eq_spdef = sum(pokemon$defense == pokemon$special_defense, na.rm = TRUE),
+both_equal       = sum((pokemon$attack  == pokemon$special_attack) &
+(pokemon$defense == pokemon$special_defense), na.rm = TRUE)
+)
+knitr::kable(eq_counts, digits = 3)
+
+```
+
+```{r}
+# 7) Dual-type densities
+
+p_den_hp  <- ggplot(pokemon, aes(hp,             color = dual_type)) + geom_density() + theme_minimal() + labs(title="HP by dual_type", y=NULL)
+p_den_def <- ggplot(pokemon, aes(defense,        color = dual_type)) + geom_density() + theme_minimal() + labs(title="Defense by dual_type", y=NULL)
+p_den_exp <- ggplot(pokemon, aes(base_experience,color = dual_type)) + geom_density() + theme_minimal() + labs(title="Base experience by dual_type", y=NULL)
+
+density_panel <- p_den_hp / p_den_def / p_den_exp
+density_panel
+
+dual_means_atk <- pokemon |> group_by(dual_type) |> summarise(`mean(attack)` = mean(attack, na.rm=TRUE), .groups="drop")
+knitr::kable(dual_means_atk, digits = 3)
+
+```
+
+```{r}
+# 8) Correlation heatmap (numeric cols excluding generation_id)
+
+num_keep <- pokemon |> select(where(is.numeric)) |> select(!generation_id)
+M <- cor(num_keep, use = "pairwise.complete.obs")
+corrplot::corrplot(M, method = "color", type = "upper", addCoef.col = "black", tl.col = "black",
+number.cex = 0.5, tl.srt = 45)
+
+png("figures/k_corrplot_matrix.png", width = 1200, height = 1200, res = 140)
+corrplot::corrplot(M, method = "color", type = "upper", addCoef.col = "black", tl.col = "black",
+number.cex = 0.5, tl.srt = 45)
+dev.off()
+
+```
+
+```{r}
+# 9) base_stat_total by generation
+
+gen_total <- pokemon |>
+group_by(generation_id_f) |>
+summarise(n = n(),
+mean_total = mean(base_stat_total, na.rm=TRUE),
+sd_total   = sd(base_stat_total,   na.rm=TRUE)) |>
+arrange(generation_id_f)
+
+knitr::kable(gen_total, digits = 1)
+
+p_gen_total <- ggplot(pokemon, aes(generation_id_f, base_stat_total)) +
+geom_boxplot(outlier.alpha=.4) + theme_bw() +
+labs(title="Base stat total by generation (incl. Unknown)", x="Generation", y="Base stat total")
+p_gen_total
+
+```
+
+
+```{r}
+# 10) Speed by dual_type (boxplot + quick t-test)
+
+p_speed_dual <- ggplot(pokemon, aes(x = dual_type, y = speed)) +
+geom_boxplot(outlier.alpha=.4) + theme_bw() +
+labs(title="Speed by dual_type", x="Dual type?", y="Speed")
+p_speed_dual
+
+tt_speed <- broom::tidy(t.test(speed ~ dual_type, data = pokemon))
+knitr::kable(tt_speed, digits = 3)
+
+```
+
+```{r}
+# 11) Base experience VS base stat total (scatter + OLS line)
+
+p_exp_total <- ggplot(pokemon, aes(base_experience, base_stat_total)) +
+geom_point(alpha=.6) + geom_smooth(method="lm", se=FALSE) + theme_bw() +
+labs(title="Base experience vs base stat total", x="Base experience", y="Base stat total")
+ggsave("figures/baseexp_vs_basetotal.png", p_exp_total, width = 7, height = 5, dpi = 150)
+p_exp_total
+
+```
+
+```{r}
+# 12) Speed vs log(weight), faceted by top 6 primary types
+
+top6 <- pokemon |> count(type_1) |> arrange(desc(n)) |> slice_head(n=6) |> pull(type_1)
+p_speed_lw_facets <- pokemon |>
+filter(type_1 %in% top6, !is.na(log_weight)) |>
+ggplot(aes(log_weight, speed)) +
+geom_point(alpha=.55) + geom_smooth(method="lm", se=FALSE) +
+facet_wrap(~type_1, ncol=3) + theme_bw() +
+labs(title="Speed vs log(weight): top 6 primary types", x="log(weight)", y="Speed")
+ggsave("figures/speed_vs_logweight_top6_types.png", p_speed_lw_facets, width = 9, height = 6, dpi = 150)
+p_speed_lw_facets
+
+```
+
+
+### Null Hypotheses
+After doing EDA, we determined some potential null hypotheses that are worth further exploring. 
+
+$$
+H_0^{(1)}: \beta_{\text{speed}} = \beta_{\text{attack}} = 0, \quad
+H_0^{(2)}: \beta_{\text{dual\_type\_x\_defense}} = 0, \quad
+H_0^{(3)}: \beta_{\text{base\_experience}} = 0
+$$
+
+### Plots Motivating our Hypothesis
+```{r}
+#1. 
+p1 <- ggplot(pokemon, aes(speed, hp))     + geom_point() + geom_smooth(method='lm', se=FALSE) + theme_minimal() + labs(title="HP vs. Speed")
+p2 <- ggplot(pokemon, aes(attack, hp))    + geom_point() + geom_smooth(method='lm', se=FALSE) + theme_minimal() + labs(title="HP vs. Attack")
+p3 <- ggplot(pokemon, aes(speed, attack)) + geom_point() + geom_smooth(method='lm', se=FALSE) + theme_minimal() + labs(title="Attack vs. Speed")
+g_triptych <- p1 + p2 + p3 + patchwork::plot_layout(ncol=2)
+ggsave("figures/k_hypothesis_triptych.png", plot = g_triptych, width = 9, height = 6, dpi = 150)
+g_triptych
+
+corrs_simple <- pokemon |>
+summarise(`cor(speed, hp)` = cor(speed, hp),
+`cor(speed, attack)` = cor(speed, attack),
+`cor(attack, hp)` = cor(attack, hp))
+knitr::kable(corrs_simple, digits = 3)
+```
+
+```{r}
+#2
+ggplot(pokemon) +
+geom_density(aes(x = defense, color = dual_type)) +
+theme_minimal() +
+labs(title = "Distribution of Defense Score by Dual Type",
+color = "Dual Type",
+x = "Defense",
+y = "")
+
+```
+
+```{r}
+#3
+ggplot(pokemon) +
+geom_point(aes(x = base_experience, y = hp)) +
+labs(title = "HP vs. Base Experience",
+x = "Base Experience",
+y = "HP") +
+theme_minimal()
+
+#special attack/defense motivation
+special_df <- pokemon |>
+  mutate(
+    same_attack  = special_attack  == attack,
+    same_defense = special_defense == defense
+  )
+
+p_same_atk <- ggplot(special_df) +
+  geom_point(aes(x = attack, y = special_attack, color = same_attack)) +
+  labs(
+    title = "Identical Values of Special Attack and Attack",
+    x = "Attack",
+    y = "Special Attack",
+    color = "Identical Values"
+  ) +
+  theme_minimal()
+
+p_same_def <- ggplot(special_df) +
+  geom_point(aes(x = defense, y = special_defense, color = same_defense)) +
+  labs(
+    title = "Identical Values of Special Defense and Defense",
+    x = "Defense",
+    y = "Special Defense",
+    color = "Identical Values"
+  ) +
+  theme_minimal()
+
+same_panel <- p_same_atk / p_same_def
+same_panel
+
+
+```
+
+### Limitations of dataset
+This dataset doesn't include some characteristics of Pokemon that may or may not be helpful in answering our questions. For example, it doesn't include the catch rate of Pokemon or if the Pokemon is legendary/mythical or not. 
+
+## Proposed analysis plan
+The team will carry out an iterative, back-and-forth model-building process within the linear regression framework for predicting HP, trying different combinations of predictors and interactions. At each stage, we will use methods discussed in class—primarily *t-tests* for individual coefficients and *F-tests* for groups of terms—to assess which variables and interactions meaningfully contribute to the model. Once we arrive at a well-supported specification, we will use the fitted model to test the three hypotheses outlined earlier, reject or fail to reject them based on the results, and summarize our conclusions in the final project write-up.
+
+## Acknowledgements 
+ChatGPT was used to help with coding. Yin and Kareena did the EDA and made the figures. Irene did the written portion of the report. Sam made the presentation.
