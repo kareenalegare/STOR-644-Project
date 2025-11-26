@@ -1,0 +1,207 @@
+---
+title: "Data Analysis"
+output: pdf_document
+output_dir: ../reports
+---
+
+```{r echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(kableExtra)
+
+pokemon <- read.csv("../data/processed/pokemon_processed.csv")
+```
+
+## Build the model
+
+### Create design matrix
+
+```{r}
+X <- pokemon |>
+  select(-c(pokemon, height, weight, type_1, type_2,egg_group_1, egg_group_2, 
+            generation_id, base_stat_total, hp)) |>
+  mutate(intercept = 1,
+         dual_type = if_else(dual_type == TRUE, 1, 0),
+         dual_type_defense = dual_type * defense) |>
+  select(intercept, everything()) |>
+  as.matrix()
+
+y <- pokemon |>
+  select(hp) |>
+  as.matrix()
+```
+
+### Model
+
+```{r}
+fit <- lm(y ~ 0 + X)
+
+tidy(fit) |>
+  kable(digits = 3)
+```
+
+Our model was selected using domain knowledge about Pokemon and our EDA. We find that base experience, log(weight), and log(height) have positive marginal effects on a Pokemon's HP. We also find that defense, special attack, and speed have negative marginal effects on HP. The remaining predictors, attack, special defense, dual type, and the interaction between dual type and defense did not have a significant effect on HP at the $\alpha=0.05$ level. Although outside the scope of our research questions, the model's adjusted $R^2$ is 0.94, indicating that 94% of the variability in HP can be explained by our predictors.
+
+Even though some of our hypotheses can be immediately tested using our model output, we will provide more explicit testing below.
+
+## Recall our hypotheses:
+
+$$
+H_0^{(1)}: \beta_{\text{speed}}=\beta_{\text{attack}}=0, \quad
+H_0^{(2)}: \beta_{\text{dual\_type\_x\_defense}}=0, \quad
+H_0^{(3)}: \beta_{\text{base\_experience}}=0
+$$
+
+## Setup helper functions
+
+```{r}
+find_beta <- function(y, X) {
+
+  beta_hat <- solve(t(X) %*% X) %*% t(X) %*% y
+
+  return(beta_hat)
+}
+
+
+f_test_quad <- function(y, X, C, d) {
+  beta_hat <- find_beta(y, X)
+
+  num <- t(C %*% beta_hat - d) %*% solve(C %*% solve(t(X) %*% X) %*% t(C)) %*% 
+    (C %*% beta_hat - d)
+
+  den <- nrow(C) * ((t(y - X %*% beta_hat) %*% (y - X %*% beta_hat))/
+                      (nrow(X)-ncol(X)))
+
+  f_stat <- num/den
+
+  p_val <- 1 - pf(f_stat, df1 = nrow(C), df2 = nrow(X)-ncol(X))
+
+  return(p_val)
+}
+
+make_ci <- function(y, X, beta_hat,
+                    variance, known_var = TRUE,
+                    lambda, alpha) {
+
+  if (known_var == TRUE) {
+    test_stat <- qnorm(1-(alpha/2))
+  }
+  else{
+    test_stat <- qt(p = 1-(alpha/2), df = nrow(X)-ncol(X))
+    variance <- (t(y - X %*% beta_hat) %*% (y - X %*% beta_hat))/
+      (nrow(X)-ncol(X))
+  }
+
+  lb <- t(lambda) %*% beta_hat - test_stat *
+    sqrt(variance * t(lambda) %*% solve(t(X) %*% X) %*% lambda)
+
+  ub <- t(lambda) %*% beta_hat + test_stat *
+    sqrt(variance * t(lambda) %*% solve(t(X) %*% X) %*% lambda)
+
+  return(c(lb, ub))
+}
+
+beta_hat <- find_beta(y, X) |> as.matrix()
+```
+
+## Test Hypothesis 1
+
+$$H_0^{(1)}: \beta_{\text{speed}}=\beta_{\text{attack}}=0$$
+
+We begin with F-tests where we first look at if $\beta_{\text{speed}}=\beta_{\text{attack}}$ and then jointly if $\beta_{\text{speed}}=0=\beta_{\text{attack}}$.
+
+```{r}
+C_1_equal <- matrix(c(0,0,1,0,0,0,-1,0,0,0,0), nrow = 1, byrow = TRUE)
+
+C_1_zero <- matrix(c(c(0,0,0,0,0,0,1,0,0,0,0),
+                c(0,0,1,0,0,0,0,0,0,0,0)), nrow = 2, byrow = TRUE)
+
+d_1 <- matrix(data = c(0,0))
+d <- matrix(0)
+
+pval_equal <- f_test_quad(y, X, C_1_equal, d) 
+pval_zero <- f_test_quad(y, X, C_1_zero, d_1)
+```
+
+| Hypothesis                                     | p-value                  |
+|-------------------|----------------------|
+| $\beta_{\text{speed}}=\beta_{\text{attack}}$   | `r round(pval_equal, 3)` |
+| $\beta_{\text{speed}}=0=\beta_{\text{attack}}$ | `r round(pval_zero, 3)`  |
+
+Both p-values are nearly 0, meaning that there is evidence at the $\alpha=0.05$ level that $\beta_{\text{speed}} \neq \beta_{\text{attack}}$ and that either $\beta_{\text{speed}} \neq 0$ or $\beta_{\text{attack}} \neq 0$. To further this, we continue to test whether either are individually equal to 0.
+
+```{r}
+C_1a <- matrix(c(0,0,0,0,0,0,1,0,0,0,0), nrow = 1)
+C_1b <- matrix(c(0,0,1,0,0,0,0,0,0,0,0), nrow = 1)
+
+pval_speed <- f_test_quad(y, X, C_1a, d)
+pval_attack <- f_test_quad(y, X, C_1b, d)
+```
+
+| Hypothesis                  | p-value                   |
+|-----------------------------|---------------------------|
+| $\beta_{\text{speed}} = 0$  | `r round(pval_speed, 3)`  |
+| $\beta_{\text{attack}} = 0$ | `r round(pval_attack, 3)` |
+
+We now see that there is evidence that $\beta_{\text{speed}} \neq 0$, but we cannot say the same for $\beta_{\text{attack}}$. To provide some additional insight, we can look at the 95% confidence interval for these coefficients.
+
+```{r}
+ci_speed <- make_ci(y, X, beta_hat, known_var = FALSE, 
+                    lambda = c(0,0,0,0,0,0,1,0,0,0,0), alpha = 0.05)
+ci_attack <- make_ci(y, X, beta_hat, known_var = FALSE, 
+                     lambda = c(0,0,1,0,0,0,0,0,0,0,0), alpha = 0.05)
+```
+
+The 95% confidence interval for $\beta_{\text{speed}}$ is (`r round(ci_speed[1], 3)`, `r round(ci_speed[2], 3)`). Because 0 is not in this interval, our results align with the F-tests performed above.
+
+The 95% confidence interval for $\beta_{\text{attack}}$ is (`r round(ci_attack[1], 3)`, `r round(ci_attack[2], 3)`). We see that 0 is in this interval, which again aligns with the results seen from the F-tests.
+
+## Test Hypothesis 2
+
+$$H_0^{(2)}: \beta_{\text{dual\_type\_x\_defense}}=0$$
+
+We will perform a single F-test to test this hypothesis.
+
+```{r}
+C_2 <- matrix(c(0,0,0,0,0,0,0,0,0,0,1), nrow = 1, byrow = TRUE)
+
+pval_interaction <- f_test_quad(y, X, C_2, d)
+```
+
+| Hypothesis                                | p-value                        |
+|---------------------|--------------------------|
+| $\beta_{\text{dual\_type\_x\_defense}}=0$ | `r round(pval_interaction, 3)` |
+
+The p-value for this F-test is greater than $\alpha = 0.05$, so we fail to reject our null hypothesis. We do not have sufficient evidence that the interaction between dual type and defense has an effect on HP. We can confirm these findings with a 95% confidence interval.
+
+```{r}
+ci_interaction <- make_ci(y, X, beta_hat, known_var = FALSE, 
+                          lambda = c(0,0,0,0,0,0,0,0,0,0,1), alpha = 0.05)
+```
+
+The 95% confidence interval for $\beta_{\text{dual\_type\_x\_defense}}$ is (`r round(ci_interaction[1], 3)`, `r round(ci_interaction[2], 3)`). Because 0 is in this interval, our results align with the F-test performed above.
+
+## Test Hypothesis 3
+
+$$H_0^{(3)}: \beta_{\text{base\_experience}}=0$$
+
+For our final hypothesis, we will again begin with an F-test.
+
+```{r}
+C_3 <- matrix(c(0,1,0,0,0,0,0,0,0,0,0), nrow = 1, byrow = TRUE)
+
+pval_base_exp <- f_test_quad(y, X, C_3, d) 
+```
+
+| Hypothesis                          | p-value                     |
+|-------------------------------------|-----------------------------|
+| $\beta_{\text{base\_experience}}=0$ | `r round(pval_base_exp, 3)` |
+
+The p-value of approximately 0 indicates to us evidence that $\beta_{\text{base\_experience}} \neq 0$. A Pokemon's base experience appears to have an effect on its HP. The following 95% confidence interval should confirm this to us.
+
+```{r}
+ci_base_exp <- make_ci(y, X, beta_hat, known_var = FALSE, 
+                          lambda = c(0,1,0,0,0,0,0,0,0,0,0), alpha = 0.05)
+```
+
+As expected, the 95% confidence interval for $\beta_{\text{base\_experience}}$ is (`r round(ci_base_exp[1], 3)`, `r round(ci_base_exp[2], 3)`), which does not contain 0. So, our results align with the F-test performed above.
