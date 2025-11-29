@@ -357,5 +357,15 @@ kable(test_summary, digits = 3,
 - **Hypothesis 3 (base experience).**  
   We decisively reject \(H_3: \beta_{\text{base\_experience}} = 0\) (p reported as 0.000), and the confidence interval \([0.234,\;0.296]\) lies entirely above 0. Base experience is therefore a strong positive predictor of HP even after controlling for stats and size.
 
+Overall, the combination of individual and joint F-tests tells a coherent story: **HP is most strongly associated with base experience and speed**, with additional contributions from defense and special attack (from the original model summary), while attack, special defense, dual type, and the dual-type interaction are not statistically important once the other variables are included. The diagnostics plots indicate that the assumptions for a linear model are reasonable for this dataset, so these inference results are reasonably trustworthy. 
 
-Overall, the combination of individual and joint F-tests tells a coherent story: **HP is most strongly associated with base experience and speed**, with additional contributions from defense and special attack (from the original model summary), while attack, special defense, dual type, and the dual-type interaction are not statistically important once the other variables are included. The diagnostics indicate that the linear model is a good approximation for HP in this dataset, so these inference results are reasonably trustworthy.
+## Peer Review Response
+Two of the peer reviewers suggested expanding the introduction to provide more context on how Pokemon works, its game mechanics, and why we are interested in HP and its relationship to other parameters. So we added some more detail and explanations to our introduction in Part 1. 
+
+## Limitations and Future Extensions
+As mentioned in Part 1, one limitation of this dataset is it doesn't include some characteristics of Pokemon that may or may not be helpful in answering our questions like the catch rate of Pokemon or if the Pokemon is legendary/mythical or not. One of our peer reviewers also pointed out that our dataset doesn't include what "evolutionary stage" a Pokemon is. Including these variables and seeing if they affect HP could be a possible future extension. In addition, the model we used is a very simple linear model so another possible extension is exploring nonlinear models. 
+
+## Acknowledgements
+ChatGPT was used to help with coding. Yin and Kareena did the EDA and made the figures in Part 1. Kareena did the coding for the hypothesis tests in Part 2. Yin did the coding for the diagnostics in Part 2. Irene did the written portion of the reports. Sam made the presentation.
+
+
