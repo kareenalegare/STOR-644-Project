@@ -27,10 +27,8 @@ Part 2 report for the course project includes:
 
 ``` text
 report/
+├── 01_load_data-EDA (updated).pdf
 ├── 01_load_data-EDA.pdf
 ├── 02_data_analysis.pdf
+├── STOR_664_Final_report.pdf
 ```
-
-## Expectations
-
--   Each file should also be uploaded to Gradescope for grading.
