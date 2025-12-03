@@ -38,4 +38,4 @@ This repository contains the final group project for STOR 664, Fall 2025. Our go
 
 ## Acknowledgements
 
-ChatGPT was used to help with coding. Yin and Kareena did the EDA and made the figures. Irene did the written portion of the report. Sam made the presentation.
+ChatGPT was used to assist with code implementation and editing. Yin and Kareena performed the exploratory data analysis and created the figures in Part 1. Kareena implemented the hypothesis test code in Part 2. Yin implemented the diagnostic plots in Part 2. Irene wrote the narrative portions of the reports. Sam prepared the presentation.
