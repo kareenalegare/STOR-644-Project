@@ -12,9 +12,11 @@ urlcolor: blue
 ## Introduction
 We used the Pokemon dataset from TidyTuesday. [Dataset Link](https://github.com/rfordatascience/tidytuesday/blob/main/data/2025/2025-04-01/readme.md) 
 
-Pokemon is a Japanese video game where you catch Pokemon in the wild and use them to fight your battles. Pokemon are wild monsters and each one has a type, like fire, water, grass, etc. They also have basic stats like HP, attack, defense etc. The dataset we chose 949 rows and 22 columns with information about the Pokemon's name, height weight, stats, type etc. 
+Pokemon is a Japanese video game where you catch Pokemon in the wild and use them to fight battles against other Pokemon. Pokemon are wild monsters and each one has a type, like fire, water, grass, etc. The type of a Pokemon will affect battle outcomes through a system of strengths and weakness. For example, fire attacks are very effective against grass Pokemon which results in increased damage. Pokemon also have basic stats like HP (Hit Points), attack, defense etc. These stats will also influence a Pokemon's performance The stat we are most interested in is HP which determines how much damage a Pokemon can take before fainting. The dataset we chose has 949 rows and 22 columns with information about the Pokemon's name, height weight, stats, type etc. 
 
-The question we want to answer is: What characteristics of Pokemon best predict their HP stat? Is there a relationship between HP and the Pokemon's other characteristics? 
+The question we want to answer is: What characteristics of Pokemon best predict their HP stat? Is there a relationship between HP and the Pokemon's other characteristics?
+
+We want to answer these questions because it will provide insight into how Pokemon are designed and if there are any patterns in determining a Pokemon's stats. For example, perhaps Pokemon with higher attack or speed might have lower HP indicating that these Pokemon are designed to do high damage quickly. Or perhaps Pokemon with higher defense have higher HP indicating that these Pokemon are designed to last longer and endure more damage. Understanding the relationship between HP and other parameters will allow players to gain a deeper understanding of the game and more effectively strategize their battles.  
 
 There are many existing projects that explore a Pokemon dataset. These can be found on Kaggle and Medium. Many of them do data visualization or EDA. In particular, this [Project](https://medium.com/@hanahshih46/pokemon-data-visualization-and-analysis-with-r-60970c8e37f4) attempts to answer a similar question as ours and performed a simple linear regression with HP as their Y-variable. 
 
@@ -38,20 +40,21 @@ dir.create("data/processed", recursive = TRUE, showWarnings = FALSE)
 dir.create("tables",         recursive = TRUE, showWarnings = FALSE)
 dir.create("figures",        recursive = TRUE, showWarnings = FALSE)
 
-tues <- tidytuesdayR::tt_load(2025, week = 13)
-pokemon <- tues$pokemon_df |>
+# tues <- tidytuesdayR::tt_load(2025, week = 13)
+# pokemon <- tues$pokemon_df |>
 
-select(-id, -species_id, -color_1, -color_2, -color_f, -url_icon, -url_image) |>
-clean_names() |>
-mutate(
-dual_type       = !is.na(type_2),
-log_weight      = if_else(weight > 0, log(weight), NA_real_),
-log_height      = if_else(height > 0, log(height), NA_real_),
-base_stat_total = hp + attack + defense + special_attack + special_defense + speed
-)
+# select(-id, -species_id, -color_1, -color_2, -color_f, -url_icon, -url_image) |>
+# clean_names() |>
+# mutate(
+# dual_type       = !is.na(type_2),
+# log_weight      = if_else(weight > 0, log(weight), NA_real_),
+# log_height      = if_else(height > 0, log(height), NA_real_),
+# base_stat_total = hp + attack + defense + special_attack + special_defense + speed
+# )
 
-write_csv(pokemon, "data/processed/pokemon_processed.csv")
+# write_csv(pokemon, "data/processed/pokemon_processed.csv")
 
+pokemon <- read.csv("../data/processed/pokemon_processed.csv")
 
 ```
 

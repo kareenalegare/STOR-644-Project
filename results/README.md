@@ -6,6 +6,7 @@ This folder stores numeric results (tables) and visual outputs (figures) generat
 ```text
 results/
 ├── tables/   # Numerical summaries and model results
+├── part 1
 ├──────chisq_type1_type2_independence.csv – chi-squared test of independence between type_1 and type_2.
 ├──────count_by_generation.csv – counts of Pokémon by generation_id.
 ├──────count_by_type1.csv – counts of Pokémon by primary type (type_1).
@@ -20,7 +21,16 @@ results/
 ├──────type1_stats_all_stats.csv – type-wise mean and SD summaries for all base stats.
 ├──────type1_type2_joint_counts_proportions.csv – joint counts and conditional probabilities
 ├──────type2_preference_by_type1.csv – most common secondary types for each primary type.
+├── part 2
+├──────coef_table.csv - coefficient table 
+├──────H1_individual_tests.csv - Individual F-tests for H1
+├──────H1_joint_tests.csv - Joint F-test for H1
+├──────H2_interaction_test.csv - F-test for H2
+├──────H3_base_experience_test.csv F-test for H3
+├──────hypothesis_tests_summary.csv - summary table for all analysis
+
 ├── figures/  # Plots and visualizations
+├── part 1
 ├──────baseexp_vs_basetotal.png – base experience vs base stat total with OLS line.
 ├──────box_basetotal_by_generation.png – distribution of base stat total by generation.
 ├──────box_hp_by_generation.png
@@ -44,4 +54,9 @@ results/
 ├──────k_special_attack_vs_attack.png
 ├──────k_special_defense_vs_defense.png.
 ├──────speed_vs_logweight_top6_types.png – Speed vs log(weight) faceted by the six most common primary types.
+├── part 2
+├──────coef_ci_plot.png - coefficient plot
+├──────qq_plot_residuals.png - qq plot of residuals
+├──────observed_vs_fitted_hp.png - plot of overserved data vs fitted data (hp)
+├──────residuals_vs_fitted_hp.png - plot of residuals vs fitted data (hp)
 ```

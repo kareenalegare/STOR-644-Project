@@ -1,0 +1,371 @@
+---
+title: "Data Analysis"
+output: pdf_document
+output_dir: ../reports
+---
+
+```{r echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(kableExtra)
+
+pokemon <- read.csv("../data/processed/pokemon_processed.csv")
+```
+
+## Build the model
+
+### Create design matrix
+
+```{r}
+X <- pokemon |>
+  select(-c(pokemon, height, weight, type_1, type_2,egg_group_1, egg_group_2, 
+            generation_id, base_stat_total, hp)) |>
+  mutate(intercept = 1,
+         dual_type = if_else(dual_type == TRUE, 1, 0),
+         dual_type_defense = dual_type * defense) |>
+  select(intercept, everything()) |>
+  as.matrix()
+
+y <- pokemon |>
+  select(hp) |>
+  as.matrix()
+```
+
+### Model
+
+```{r}
+fit <- lm(y ~ 0 + X)
+
+coef_tab <- broom::tidy(fit) |>
+  mutate(
+    p.value = if_else(
+      p.value < 1e-4,                                   # threshold for "tiny"
+      formatC(p.value, format = "e", digits = 3),      # scientific, e.g. 1.23e-10
+      sprintf("%.3f", p.value)                         # regular 3-decimal format
+    )
+  )
+
+kable(coef_tab, digits = 3)
+```
+
+Our model was selected using domain knowledge about Pokemon and our EDA. We find that base experience, log(weight), and log(height) have positive marginal effects on a Pokemon's HP. We also find that defense, special attack, and speed have negative marginal effects on HP. The remaining predictors, attack, special defense, dual type, and the interaction between dual type and defense did not have a significant effect on HP at the $\alpha=0.05$ level. Although outside the scope of our research questions, the model's adjusted $R^2$ is 0.94, indicating that 94% of the variability in HP can be explained by our predictors.
+
+Even though some of our hypotheses can be immediately tested using our model output, we will provide more explicit testing below.
+
+## Recall our hypotheses:
+
+$$
+H_0^{(1)}: \beta_{\text{speed}}=\beta_{\text{attack}}=0, \quad
+H_0^{(2)}: \beta_{\text{dual\_type\_x\_defense}}=0, \quad
+H_0^{(3)}: \beta_{\text{base\_experience}}=0
+$$
+
+## Setup helper functions
+
+```{r}
+find_beta <- function(y, X) {
+
+  beta_hat <- solve(t(X) %*% X) %*% t(X) %*% y
+
+  return(beta_hat)
+}
+
+
+f_test_quad <- function(y, X, C, d) {
+  beta_hat <- find_beta(y, X)
+
+  num <- t(C %*% beta_hat - d) %*% solve(C %*% solve(t(X) %*% X) %*% t(C)) %*% 
+    (C %*% beta_hat - d)
+
+  den <- nrow(C) * ((t(y - X %*% beta_hat) %*% (y - X %*% beta_hat))/
+                      (nrow(X)-ncol(X)))
+
+  f_stat <- num/den
+
+  p_val <- 1 - pf(f_stat, df1 = nrow(C), df2 = nrow(X)-ncol(X))
+
+  return(p_val)
+}
+
+make_ci <- function(y, X, beta_hat,
+                    variance, known_var = TRUE,
+                    lambda, alpha) {
+
+  if (known_var == TRUE) {
+    test_stat <- qnorm(1-(alpha/2))
+  }
+  else{
+    test_stat <- qt(p = 1-(alpha/2), df = nrow(X)-ncol(X))
+    variance <- (t(y - X %*% beta_hat) %*% (y - X %*% beta_hat))/
+      (nrow(X)-ncol(X))
+  }
+
+  lb <- t(lambda) %*% beta_hat - test_stat *
+    sqrt(variance * t(lambda) %*% solve(t(X) %*% X) %*% lambda)
+
+  ub <- t(lambda) %*% beta_hat + test_stat *
+    sqrt(variance * t(lambda) %*% solve(t(X) %*% X) %*% lambda)
+
+  return(c(lb, ub))
+}
+
+beta_hat <- find_beta(y, X) |> as.matrix()
+```
+
+## Test Hypothesis 1
+
+$$H_0^{(1)}: \beta_{\text{speed}}=\beta_{\text{attack}}=0$$
+
+We begin with F-tests where we first look at if $\beta_{\text{speed}}=\beta_{\text{attack}}$ and then jointly if $\beta_{\text{speed}}=0=\beta_{\text{attack}}$.
+
+```{r}
+C_1_equal <- matrix(c(0,0,1,0,0,0,-1,0,0,0,0), nrow = 1, byrow = TRUE)
+
+C_1_zero <- matrix(c(c(0,0,0,0,0,0,1,0,0,0,0),
+                c(0,0,1,0,0,0,0,0,0,0,0)), nrow = 2, byrow = TRUE)
+
+d_1 <- matrix(data = c(0,0))
+d <- matrix(0)
+
+pval_equal <- f_test_quad(y, X, C_1_equal, d) 
+pval_zero <- f_test_quad(y, X, C_1_zero, d_1)
+
+fmt_p <- function(p) {
+  ifelse(
+    p < 1e-4,                              # treat as "tiny"
+    formatC(p, format = "e", digits = 2),  # e.g. 1.23e-10
+    sprintf("%.3f", p)                     # otherwise 0.123 format
+  )
+}
+```
+
+| Hypothesis                                     | p-value                  |
+|-------------------|----------------------|
+| $\beta_{\text{speed}}=\beta_{\text{attack}}$   | `r fmt_p(pval_equal)`    |
+| $\beta_{\text{speed}}=0=\beta_{\text{attack}}$ | `r round(pval_zero, 3)`  |
+
+Both p-values are nearly 0, meaning that there is evidence at the $\alpha=0.05$ level that $\beta_{\text{speed}} \neq \beta_{\text{attack}}$ and that either $\beta_{\text{speed}} \neq 0$ or $\beta_{\text{attack}} \neq 0$. To further this, we continue to test whether either are individually equal to 0.
+
+```{r}
+C_1a <- matrix(c(0,0,0,0,0,0,1,0,0,0,0), nrow = 1)
+C_1b <- matrix(c(0,0,1,0,0,0,0,0,0,0,0), nrow = 1)
+
+pval_speed <- f_test_quad(y, X, C_1a, d)
+pval_attack <- f_test_quad(y, X, C_1b, d)
+```
+
+| Hypothesis                  | p-value                   |
+|-----------------------------|---------------------------|
+| $\beta_{\text{speed}} = 0$  | `r round(pval_speed, 3)`  |
+| $\beta_{\text{attack}} = 0$ | `r fmt_p(pval_attack)`    |
+
+We now see that there is evidence that $\beta_{\text{speed}} \neq 0$, but we cannot say the same for $\beta_{\text{attack}}$. To provide some additional insight, we can look at the 95% confidence interval for these coefficients.
+
+```{r}
+ci_speed <- make_ci(y, X, beta_hat, known_var = FALSE, 
+                    lambda = c(0,0,0,0,0,0,1,0,0,0,0), alpha = 0.05)
+ci_attack <- make_ci(y, X, beta_hat, known_var = FALSE, 
+                     lambda = c(0,0,1,0,0,0,0,0,0,0,0), alpha = 0.05)
+```
+
+The 95% confidence interval for $\beta_{\text{speed}}$ is (`r round(ci_speed[1], 3)`, `r round(ci_speed[2], 3)`). Because 0 is not in this interval, our results align with the F-tests performed above.
+
+The 95% confidence interval for $\beta_{\text{attack}}$ is (`r round(ci_attack[1], 3)`, `r round(ci_attack[2], 3)`). We see that 0 is in this interval, which again aligns with the results seen from the F-tests.
+
+## Test Hypothesis 2
+
+$$H_0^{(2)}: \beta_{\text{dual\_type\_x\_defense}}=0$$
+
+We will perform a single F-test to test this hypothesis.
+
+```{r}
+C_2 <- matrix(c(0,0,0,0,0,0,0,0,0,0,1), nrow = 1, byrow = TRUE)
+
+pval_interaction <- f_test_quad(y, X, C_2, d)
+```
+
+| Hypothesis                                | p-value                        |
+|---------------------|--------------------------|
+| $\beta_{\text{dual\_type\_x\_defense}}=0$ |  `r fmt_p(pval_interaction)` |
+
+The p-value for this F-test is greater than $\alpha = 0.05$, so we fail to reject our null hypothesis. We do not have sufficient evidence that the interaction between dual type and defense has an effect on HP. We can confirm these findings with a 95% confidence interval.
+
+```{r}
+ci_interaction <- make_ci(y, X, beta_hat, known_var = FALSE, 
+                          lambda = c(0,0,0,0,0,0,0,0,0,0,1), alpha = 0.05)
+```
+
+The 95% confidence interval for $\beta_{\text{dual\_type\_x\_defense}}$ is (`r round(ci_interaction[1], 3)`, `r round(ci_interaction[2], 3)`). Because 0 is in this interval, our results align with the F-test performed above.
+
+## Test Hypothesis 3
+
+$$H_0^{(3)}: \beta_{\text{base\_experience}}=0$$
+
+For our final hypothesis, we will again begin with an F-test.
+
+```{r}
+C_3 <- matrix(c(0,1,0,0,0,0,0,0,0,0,0), nrow = 1, byrow = TRUE)
+
+pval_base_exp <- f_test_quad(y, X, C_3, d) 
+```
+
+| Hypothesis                          | p-value                     |
+|-------------------------------------|-----------------------------|
+| $\beta_{\text{base\_experience}}=0$ | `r round(pval_base_exp,3)`  |
+
+The p-value of approximately 0 indicates to us evidence that $\beta_{\text{base\_experience}} \neq 0$. A Pokemon's base experience appears to have an effect on its HP. The following 95% confidence interval should confirm this to us.
+
+```{r}
+ci_base_exp <- make_ci(y, X, beta_hat, known_var = FALSE, 
+                          lambda = c(0,1,0,0,0,0,0,0,0,0,0), alpha = 0.05)
+```
+
+As expected, the 95% confidence interval for $\beta_{\text{base\_experience}}$ is (`r round(ci_base_exp[1], 3)`, `r round(ci_base_exp[2], 3)`), which does not contain 0. So, our results align with the F-test performed above.
+
+## Model diagnostics
+```{r}
+fitted_vals <- as.numeric(fitted(fit))   # \hat{y}
+resid_vals  <- as.numeric(resid(fit))    # e = y - \hat{y}
+
+diag_df <- tibble(
+  hp     = as.numeric(y),   # observed HP
+  fitted = fitted_vals,     # predicted HP
+  resid  = resid_vals       # raw residuals
+)
+
+# 1) Observed vs fitted HP
+ggplot(diag_df, aes(x = fitted, y = hp)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = 2) +
+  labs(
+    title = "Observed vs fitted HP",
+    x = "Fitted HP",
+    y = "Observed HP"
+  ) +
+  theme_bw()
+
+# 2) Residuals vs fitted HP: nonlinearity / heteroskedasticity check
+ggplot(diag_df, aes(x = fitted, y = resid)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_point(alpha = 0.6) +
+  labs(
+    title = "Residuals vs fitted HP",
+    x = "Fitted HP",
+    y = "Residual"
+  ) +
+  theme_bw()
+
+# 3) QQ plot of residuals: normality check
+ggplot(diag_df, aes(sample = resid)) +
+  stat_qq(alpha = 0.6) +
+  stat_qq_line() +
+  labs(
+    title = "QQ plot of residuals",
+    x = "Theoretical quantiles",
+    y = "Sample residuals"
+  ) +
+  theme_bw()
+
+```
+
+Figure 1 (Observed vs fitted HP) shows that the fitted values from our linear model track the observed HP quite closely: most points lie near the 45° line, with only a handful of extreme HP values showing larger deviations. This is consistent with the very high adjusted \(R^2 \approx 0.94\) from the model summary, indicating that the linear specification with our chosen predictors captures most of the variation in HP.  
+
+The residuals–vs–fitted plot does not reveal a strong systematic pattern. Residuals are roughly centered around zero across the range of fitted HP, with slightly larger spread for Pokémon with high fitted HP. This suggests that the linearity assumption is broadly reasonable, with only mild evidence of heteroskedasticity (somewhat higher variance at the upper end of HP).
+
+The QQ plot of residuals indicates that the residual distribution is close to normal in the central region but exhibits heavier upper tails: very large positive residuals occur slightly more often than a strict normal model would predict. Overall, the diagnostics support the use of standard F-inference for this dataset, while reminding us not to over-interpret results for the most extreme HP values.
+ 
+## Visual summary of key coefficients
+```{r}
+ci_df <- tibble(
+  term = c("speed", "attack", "dual_type_defense", "base_experience"),
+  estimate = c(
+    beta_hat[7],  # beta_speed
+    beta_hat[3],  # beta_attack
+    beta_hat[11], # beta_dual_type_defense
+    beta_hat[2]   # beta_base_experience
+  ),
+  lower = c(ci_speed[1], ci_attack[1], ci_interaction[1], ci_base_exp[1]),
+  upper = c(ci_speed[2], ci_attack[2], ci_interaction[2], ci_base_exp[2]),
+  p_value = c(pval_speed, pval_attack, pval_interaction, pval_base_exp)
+)
+
+ggplot(ci_df, aes(x = term, y = estimate)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.1) +
+  coord_flip() +
+  labs(
+    title = "Estimated coefficients and 95% CIs for key predictors",
+    x = "Term",
+    y = "Estimated coefficient"
+  ) +
+  theme_bw()
+
+```
+
+Figure Y displays the estimated coefficients and 95% confidence intervals for the four parameters that appear in our main hypotheses: speed, attack, the dual type \(\times\) defense interaction, and base experience.:contentReference[oaicite:2]{index=2}  
+
+Two effects stand out clearly:
+
+- **Speed** has a negative and precisely estimated effect on HP. The point estimate is about \(\hat\beta_{\text{speed}} = -0.234\), with a 95% confidence interval \([-0.285,\,-0.184]\). Increasing speed by 10 points is associated with a decrease of roughly 2–3 HP on average, holding the other predictors fixed. The confidence interval does not include 0, matching the essentially zero p-value from the F-test for \(H_0^{(1c)}:\beta_{\text{speed}}=0\).:contentReference[oaicite:3]{index=3}  
+
+- **Base experience** has a positive and precisely estimated effect. The estimated coefficient is \(\hat\beta_{\text{base\_experience}} = 0.265\), with a 95% confidence interval \([0.234,\;0.296]\). An increase of 10 points in base experience is associated with about 2.5–3 additional HP on average. Again, the interval lies entirely above 0, agreeing with the rejection of \(H_0^{(3)}\).
+
+By contrast, the intervals for **attack** and the **dual type \(\times\) defense** interaction both contain 0. Attack’s coefficient is close to zero with a 95% confidence interval \([-0.034,\;0.071]\), and the interaction’s interval is \([-0.127,\;0.029]\). These visual summaries reinforce our earlier conclusions: HP is strongly related to speed and base experience after adjustment, but we do not see a clear linear effect of attack or of the dual-type interaction term.
+
+
+## Comparison of all hypothesis tests
+
+Table 1 summarizes all of the F-tests we performed for our three main hypotheses and the additional group test.  The pattern is internally consistent and supports a simple, interpretable story:
+```{r}
+alpha <- 0.05
+
+test_summary <- tibble(
+  hypothesis = c(
+    "H1a: beta_speed = beta_attack",
+    "H1b: beta_speed = 0 = beta_attack",
+    "H1c: beta_speed = 0",
+    "H1d: beta_attack = 0",
+    "H2: beta_dual_type_defense = 0",
+    "H3: beta_base_experience = 0"
+  ),
+  p_value = c(
+    as.numeric(pval_equal),
+    as.numeric(pval_zero),
+    as.numeric(pval_speed),
+    as.numeric(pval_attack),
+    as.numeric(pval_interaction),
+    as.numeric(pval_base_exp)
+  )
+) |>
+  mutate(
+    decision_alpha_0_05 = if_else(p_value < alpha, "Reject H0", "Fail to reject H0")
+  )
+
+kable(test_summary, digits = 3,
+      caption = "Summary of hypothesis tests.")
+
+```
+
+- **Hypothesis 1 (speed vs attack).**  
+  - We strongly reject \(H_{1a}: \beta_{\text{speed}} = \beta_{\text{attack}}\) and \(H_{1b}: \beta_{\text{speed}} = 0 = \beta_{\text{attack}}\) (both p-values reported as 0 to three decimal places).  
+  - When tested individually, we reject \(H_{1c}: \beta_{\text{speed}} = 0\) (p reported as 0.000) but fail to reject \(H_{1d}: \beta_{\text{attack}} = 0\) (p = 0.494). This indicates that, conditional on the other predictors, **speed has a real linear association with HP** whereas attack does not.
+
+- **Hypothesis 2 (interaction).**  
+  We fail to reject \(H_2: \beta_{\text{dual\_type\_defense}} = 0\) (p = 0.219). Combined with the wide confidence interval that includes 0, this suggests that the interaction between dual type and defense does not have a detectable effect on HP in this model.
+
+- **Hypothesis 3 (base experience).**  
+  We decisively reject \(H_3: \beta_{\text{base\_experience}} = 0\) (p reported as 0.000), and the confidence interval \([0.234,\;0.296]\) lies entirely above 0. Base experience is therefore a strong positive predictor of HP even after controlling for stats and size.
+
+Overall, the combination of individual and joint F-tests tells a coherent story: **HP is most strongly associated with base experience and speed**, with additional contributions from defense and special attack (from the original model summary), while attack, special defense, dual type, and the dual-type interaction are not statistically important once the other variables are included. The diagnostics plots indicate that the assumptions for a linear model are reasonable for this dataset, so these inference results are reasonably trustworthy. 
+
+## Peer Review Response
+Two of the peer reviewers suggested expanding the introduction to provide more context on how Pokemon works, its game mechanics, and why we are interested in HP and its relationship to other parameters. So we added some more detail and explanations to our introduction in Part 1. 
+
+## Limitations and Future Extensions
+As mentioned in Part 1, one limitation of this dataset is it doesn't include some characteristics of Pokemon that may or may not be helpful in answering our questions like the catch rate of Pokemon or if the Pokemon is legendary/mythical or not. One of our peer reviewers also pointed out that our dataset doesn't include what "evolutionary stage" a Pokemon is. Including these variables and seeing if they affect HP could be a possible future extension. In addition, the model we used is a very simple linear model so another possible extension is exploring nonlinear models. 
+
+## Acknowledgements
+ChatGPT was used to help with coding. Yin and Kareena did the EDA and made the figures in Part 1. Kareena did the coding for the hypothesis tests in Part 2. Yin did the coding for the diagnostics in Part 2. Irene did the written portion of the reports. Sam made the presentation.
+
+

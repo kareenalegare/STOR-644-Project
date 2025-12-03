@@ -6,5 +6,6 @@ This folder contains analysis and visualization code for the project.
 ```text
 src/
 ├── 01_load_data&EDA.Rmd
+├── 02_data_analysis.Rmd
 ```
 

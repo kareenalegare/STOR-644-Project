@@ -1,0 +1,7 @@
+hypothesis,test_type,p_value,decision_alpha_0_05
+H1a: beta_speed = beta_attack,F-test (1 df),5.47e-10,Reject H0
+H1b: beta_speed = 0 = beta_attack,F-test (2 df joint),0,Reject H0
+H1c: beta_speed = 0,F-test (1 df),0,Reject H0
+H1d: beta_attack = 0,F-test (1 df),0.4942056733174123,Fail to reject H0
+H2: beta_dual_type_defense = 0,F-test (1 df),0.21917371824367748,Fail to reject H0
+H3: beta_base_experience = 0,F-test (1 df),0,Reject H0

@@ -1,4 +1,4 @@
-# STOR-644-Pokemon-Analysis
+# STOR-664-Pokemon-Analysis
 
 ## Team Members
 
@@ -29,12 +29,13 @@ This repository contains the final group project for STOR 664, Fall 2025. Our go
 
 ### 1. Clone the repository
 
-`git clone https://github.com/kareenalegare/STOR-644-Final-Project.git`
+`git clone https://github.com/kareenalegare/STOR-664-Final-Project.git`
 
 ### 2. Running Analysis Scripts
 
 `Rscript src/01_load_data&EDA.Rmd`
+`Rscript src/02_data_analysis.Rmd`
 
 ## Acknowledgements
 
-ChatGPT was used to help with coding. Yin and Kareena did the EDA and made the figures. Irene did the written portion of the report. Sam made the presentation.
+ChatGPT was used to assist with code implementation and editing. Yin and Kareena performed the exploratory data analysis and created the figures in Part 1. Kareena implemented the hypothesis test code in Part 2. Yin implemented the diagnostic plots in Part 2. Irene wrote the narrative portions of the reports. Sam prepared the presentation.
