@@ -29,7 +29,7 @@ This repository contains the final group project for STOR 664, Fall 2025. Our go
 
 ### 1. Clone the repository
 
-`git clone https://github.com/kareenalegare/STOR-644-Final-Project.git`
+`git clone https://github.com/kareenalegare/STOR-664-Final-Project.git`
 
 ### 2. Running Analysis Scripts
 
