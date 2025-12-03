@@ -34,6 +34,7 @@ This repository contains the final group project for STOR 664, Fall 2025. Our go
 ### 2. Running Analysis Scripts
 
 `Rscript src/01_load_data&EDA.Rmd`
+`Rscript src/02_data_analysis.Rmd`
 
 ## Acknowledgements
 
